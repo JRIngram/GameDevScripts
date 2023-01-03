@@ -9,6 +9,7 @@ var dungeon
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
+	print('starting');
 	randomize();
 	dungeon = _generate_dungeon();
 	for row in dungeon:
@@ -19,8 +20,6 @@ func _ready():
 				room_node.position.x = room.room_coordinates.x * 100;
 				room_node.position.y = room.room_coordinates.y * 100;
 				add_child(room_node)
-
-#func _process(delta):
 
 func _generate_dungeon():
 	print('Generating dungeon...');
@@ -44,29 +43,39 @@ func _generate_dungeon():
 	var current_coordinates = Vector2(0,0); # set starting coodinates
 
 	while get_dungeon_room_count(dungeon) < dungeon_room_count:
-		var room_to_process =  rooms_to_process_list.pop_front();
+		var room_coords_to_process =  rooms_to_process_list.pop_front();
 
-		if room_to_process != null:
-			current_coordinates = room_to_process.room_coordinates
+		if room_coords_to_process != null:
+			current_coordinates = room_coords_to_process;
 
 		var further_rooms_to_process = rooms_to_process_list.size() > 0;
 	
-		# check if valid exit exists
+		# check if valid exit exists on current room being processed
 		# if not current_coorindates = previously_process_rooms.pop_front().room_coordinates
-		while room_to_process && !_room_has_valid_exits(dungeon, room_to_process):
+		var reprocessing_room = false;
+		while room_coords_to_process && !_room_has_valid_exits(dungeon, room_coords_to_process):
+			print('moving back')
+			#print(dungeon)
+			#print(dungeon[10][0]) # change with each debug attempt
+			#print(room_coords_to_process)
 			current_coordinates = previously_processed_room_coords.pop_front();
-			room_to_process = dungeon[current_coordinates.y][current_coordinates.x]
-		var new_room = _generate_room(current_coordinates, !further_rooms_to_process, dungeon);
-		# if the forced exits do not lead to any _new_ rooms 
-		# 		step back to the room generated prior to the current room
-		#		and see if we can generate new exits 
+			room_coords_to_process = current_coordinates;
+			reprocessing_room = true
+			# need to ensure when reprocessing a room we don't destroy old exits
 		
+		var new_room
+		if reprocessing_room:
+			var room_to_reprocess = dungeon[current_coordinates.y][current_coordinates.x]
+			new_room = _reprocess_room(dungeon, room_to_reprocess);
+			reprocessing_room = false;
+		else:
+			new_room = _generate_room(current_coordinates, !further_rooms_to_process, dungeon);
+	
 		rooms_to_process_list = _add_adjacent_rooms_to_process(rooms_to_process_list, new_room)
 
-		var dun_row = dungeon[current_coordinates.y]
-		dun_row[current_coordinates.x] = new_room;
-		previously_processed_room_coords.push_front(current_coordinates);
-		print(previously_processed_room_coords)
+		dungeon[current_coordinates.y][current_coordinates.x] = new_room
+		if !previously_processed_room_coords.has(current_coordinates):
+			previously_processed_room_coords.push_front(current_coordinates);
 	
 	dungeon = _knock_through_entrances(dungeon);
 	return dungeon;
@@ -78,17 +87,16 @@ func _generate_room(coordinates: Vector2, force_exit: bool, dungeon):
 	room = _generate_room_exits(room)
 
 	if force_exit:
-		while !_room_has_at_least_one_exit(room): # TODO add function to ensure its a valid, new exit
+		while !_room_has_at_least_one_exit(room):
 			room = _generate_room_exits(room)
-			if _is_valid_room_exit(dungeon, room, Directions.UP):
+			if _is_valid_addable_room_exit(dungeon, coordinates, Directions.UP):
 				room.up = true;
-			if _is_valid_room_exit(dungeon, room, Directions.DOWN):
+			if _is_valid_addable_room_exit(dungeon, coordinates, Directions.DOWN):
 				room.down = true;
-			if _is_valid_room_exit(dungeon, room, Directions.LEFT):
+			if _is_valid_addable_room_exit(dungeon, coordinates, Directions.LEFT):
 				room.left = true;
-			if _is_valid_room_exit(dungeon, room, Directions.RIGHT):
+			if _is_valid_addable_room_exit(dungeon, coordinates, Directions.RIGHT):
 				room.right = true;
-	
 	return room;
 
 func _generate_room_exits(room):
@@ -174,31 +182,19 @@ func _add_adjacent_rooms_to_process(rooms_to_process_list, new_room):
 	if new_room.up:
 		var coordinates = Vector2(current_coordinates.x, current_coordinates.y - 1);
 		if !_is_room_in_dungeon(dungeon, coordinates):
-			cloned_rooms_to_process_list.push_front({
-				"entrance_direction": Directions.UP,
-				"room_coordinates": coordinates
-			})
+			cloned_rooms_to_process_list.push_front(coordinates)
 	if new_room.down:
 		var coordinates = Vector2(current_coordinates.x, current_coordinates.y + 1);
 		if !_is_room_in_dungeon(dungeon, coordinates):
-			cloned_rooms_to_process_list.push_front({
-				"entrance_direction": Directions.DOWN,
-				"room_coordinates": coordinates
-			})
+			cloned_rooms_to_process_list.push_front(coordinates)
 	if new_room.left:
 		var coordinates = Vector2(current_coordinates.x - 1, current_coordinates.y);
 		if !_is_room_in_dungeon(dungeon, coordinates):
-			cloned_rooms_to_process_list.push_front({
-				"entrance_direction": Directions.LEFT,
-				"room_coordinates": coordinates
-			})
+			cloned_rooms_to_process_list.push_front(coordinates)
 	if new_room.right:
 		var coordinates = Vector2(current_coordinates.x + 1, current_coordinates.y);
 		if !_is_room_in_dungeon(dungeon, coordinates):
-			cloned_rooms_to_process_list.push_front({
-				"entrance_direction": Directions.RIGHT,
-				"room_coordinates": coordinates
-			})
+			cloned_rooms_to_process_list.push_front(coordinates)
 	
 	return cloned_rooms_to_process_list
 
@@ -210,21 +206,57 @@ func get_dungeon_room_count(dungeon):
 				if room != null:
 					_room_count = _room_count + 1;
 	return _room_count;
-	
-func _is_valid_room_exit(dungeon, room, exit_direction):
-	var room_coordinates = room.room_coordinates;
+
+# Returns true if the room in a given direction does not yet exist and if an exit does not already exist in that direction
+# Else returns false
+func _is_valid_addable_room_exit(dungeon, room_coordinates, exit_direction):
+	var room = dungeon[room_coordinates.y][room_coordinates.x]
+
 	if exit_direction == Directions.UP && room_coordinates.y - 1 >= 0:
-		return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y - 1));
+		if room:
+			return !room.up && !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y - 1));
+		else:
+			return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y - 1));
 
 	if exit_direction == Directions.DOWN && room_coordinates.y < dungeon_room_count:
-		return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y + 1))
+		if room:
+			return !room.down && !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y + 1))
+		else:
+			return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x, room_coordinates.y + 1))
 
 	if exit_direction == Directions.LEFT && room_coordinates.x - 1 >= 0:
+		if room:
+			return !room.left && !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x - 1, room_coordinates.y));
 		return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x - 1, room_coordinates.y))
 
 	if exit_direction == Directions.RIGHT && room_coordinates.x < dungeon_room_count:
+		if room:
+			return !room.right && !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x + 1, room_coordinates.y))
 		return !_is_room_in_dungeon(dungeon, Vector2(room_coordinates.x + 1, room_coordinates.y))
 
-func _room_has_valid_exits(dungeon, room):
-		return _is_valid_room_exit(dungeon, room, Directions.UP) || _is_valid_room_exit(dungeon, room, Directions.DOWN) || _is_valid_room_exit(dungeon, room, Directions.LEFT) || _is_valid_room_exit(dungeon, room, Directions.RIGHT)	
+# Returns true if either up, down, left or right is a valid exit. Else returns false.
+func _room_has_valid_exits(dungeon, room_coordinates):
+		return _is_valid_addable_room_exit(dungeon, room_coordinates, Directions.UP) || _is_valid_addable_room_exit(dungeon, room_coordinates, Directions.DOWN) || _is_valid_addable_room_exit(dungeon, room_coordinates, Directions.LEFT) || _is_valid_addable_room_exit(dungeon, room_coordinates, Directions.RIGHT)	
+
+func _reprocess_room(dungeon, room):
+	var exit_added = false;
 	
+	while !exit_added:
+		var up_exit = randi() % 100;
+		var down_exit = randi() % 100;
+		var left_exit = randi() % 100;
+		var right_exit = randi() % 100;
+
+		if !room.up && up_exit < PERCENTAGE_CHANCE_OF_ROOM_EXIT_GENERATED && _is_valid_addable_room_exit(dungeon, room.room_coordinates, Directions.UP):
+			room.up = true;
+			exit_added = true;
+		if !room.down && down_exit < PERCENTAGE_CHANCE_OF_ROOM_EXIT_GENERATED && _is_valid_addable_room_exit(dungeon, room.room_coordinates, Directions.DOWN):
+			room.down = true;
+			exit_added = true;
+		if !room.left && left_exit < PERCENTAGE_CHANCE_OF_ROOM_EXIT_GENERATED && _is_valid_addable_room_exit(dungeon, room.room_coordinates, Directions.LEFT):
+			room.left = true;
+			exit_added = true;
+		if !room.right && right_exit < PERCENTAGE_CHANCE_OF_ROOM_EXIT_GENERATED && _is_valid_addable_room_exit(dungeon, room.room_coordinates, Directions.RIGHT):
+			room.right = true;
+			exit_added = true;
+	return room;
