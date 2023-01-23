@@ -204,6 +204,146 @@ class TestKnockThroughEntrances:
 		assert_true(result[0][1].left); # right room
 		assert_true(result[1][0].up); # down room
 
+class TestRemoveDeadEnds:
+	extends GutTest
+	
+	var Dungeon = load('res://Scripts/Dungeon.gd');
+	var _dungeon = null;
+	var _room = null;
+	
+	func before_each():
+		_dungeon = Dungeon.new();
+		
+	func after_each():
+		_dungeon.free();
+		_room = null;
+	
+	# test central room with no connections
+	# test four corners
+	# test central room with connections
+	func test_central_room_with_no_connections():
+		var dungeon_rooms = [
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(1,1)},
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		
+		var result = _dungeon._remove_dead_ends(dungeon_rooms);
+		var central_room = result[1][1];
+		
+		assert_false(central_room.down);
+		assert_false(central_room.right);
+		assert_false(central_room.left);
+		assert_false(central_room.up);
+	
+	func test_central_room_with_connections():
+		var dungeon_rooms = [
+			[
+				null,
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(0,1)},
+				null,
+			],
+			[
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(1,0)},
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(1,1)},
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(1,2)},
+			],
+			[
+				null,
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(2,1)},
+				null,
+			],
+		]
+		
+		var result = _dungeon._remove_dead_ends(dungeon_rooms);
+		var top_room = result[0][1];
+		var left_room = result[1][0]
+		var central_room = result[1][1];
+		var right_room = result[1][2];
+		var bottom_room = result[2][1];
+		
+		assert_false(top_room.up);
+		assert_false(top_room.left);
+		assert_false(top_room.right);
+		assert_true(top_room.down);
+		
+		assert_false(left_room.up);
+		assert_false(left_room.left);
+		assert_true(left_room.right);
+		assert_false(left_room.down);
+		
+		assert_true(central_room.down);
+		assert_true(central_room.right);
+		assert_true(central_room.left);
+		assert_true(central_room.up);
+		
+		assert_false(right_room.up);
+		assert_true(right_room.left);
+		assert_false(right_room.right);
+		assert_false(right_room.down);
+		
+		assert_true(bottom_room.up);
+		assert_false(bottom_room.left);
+		assert_false(bottom_room.right);
+		assert_false(bottom_room.down);
+
+	func test_corner_rooms_with_no_connections():
+		var dungeon_rooms = [
+			[
+				{ "up": false, "down": true, "left": false, "right": true, "room_coordinates": Vector2(0,0)},
+				null,
+				{ "up": false, "down": true, "left": true, "right": false, "room_coordinates": Vector2(0,2)},
+			],
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				{ "up": true, "down": false, "left": false, "right": true, "room_coordinates": Vector2(2,0)},
+				null,
+				{ "up": true, "down": false, "left": true, "right": false, "room_coordinates": Vector2(2,2)},
+			],
+		]
+		
+		var result = _dungeon._remove_dead_ends(dungeon_rooms);
+		var top_left_room = result[0][0];
+		var top_right_room = result[0][2];
+		var bottom_left_room = result[2][0];
+		var bottom_right_room = result[2][2];
+		
+		assert_false(top_left_room.up)
+		assert_false(top_left_room.down)
+		assert_false(top_left_room.left)
+		assert_false(top_left_room.right)
+
+		assert_false(top_right_room.up)
+		assert_false(top_right_room.down)
+		assert_false(top_right_room.left)
+		assert_false(top_right_room.right)
+
+		assert_false(bottom_left_room.up)
+		assert_false(bottom_left_room.down)
+		assert_false(bottom_left_room.left)
+		assert_false(bottom_left_room.right)
+
+		assert_false(bottom_right_room.up)
+		assert_false(bottom_right_room.down)
+		assert_false(bottom_right_room.left)
+		assert_false(bottom_right_room.right)
+
 class TestGetDungeonRoomCount:
 	extends GutTest
 	
@@ -339,11 +479,176 @@ class TestIsValidRoomExit:
 			],
 		]
 		var central_room_coords = Vector2(1,1)
-		print(dungeon_rooms[central_room_coords.y][central_room_coords.x])
 		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, central_room_coords, Directions.UP))
 		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, central_room_coords, Directions.DOWN))
 		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, central_room_coords, Directions.LEFT))
 		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, central_room_coords, Directions.RIGHT))
+
+	func test_corner_room_valid_exits():
+		var dungeon_rooms = [
+			[
+				{ "up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(0,0)},
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		var corner_room_coords = Vector2(0,0);
+
+		assert_true(_dungeon._is_valid_addable_room_exit(dungeon_rooms, corner_room_coords, Directions.DOWN))
+		assert_true(_dungeon._is_valid_addable_room_exit(dungeon_rooms, corner_room_coords, Directions.RIGHT))
+		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, corner_room_coords, Directions.LEFT))
+		assert_false(_dungeon._is_valid_addable_room_exit(dungeon_rooms, corner_room_coords, Directions.UP))
+
+class TestGetValidAddableExits:
+	extends GutTest
+	
+	var Dungeon = load('res://Scripts/Dungeon.gd');
+	var _dungeon = null;
+	
+	func before_each():
+		_dungeon = Dungeon.new();
+		
+	func after_each():
+		_dungeon.free();
+		
+	func test_central_room_no_valid_exit():
+		var dungeon_rooms = [
+			[
+				null,
+				{ "up": false, "down": true, "left": false, "right": false, "room_coordinates": Vector2(1,0)},
+				null,
+			],
+			[
+				{ "up": false, "down": false, "left": false, "right": true, "room_coordinates": Vector2(0,1)},
+				{ "up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(1,1)},
+				{ "up": false, "down": false, "left": true, "right": false, "room_coordinates": Vector2(2,1)},
+			],
+			[
+				null,
+				{"up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(1,2)},
+				null,
+			],
+		]
+		var central_room_coords = Vector2(1,1)
+		
+		var result = _dungeon._get_valid_addable_exits(dungeon_rooms, central_room_coords)
+		var expected = {
+			"up": false,
+			"down": false,
+			"left:": false,
+			"right": false,
+		}
+		
+		assert_false(result.up);
+		assert_false(result.down);
+		assert_false(result.left);
+		assert_false(result.right);
+
+	func test_central_room_with_valid_exits():
+		var dungeon_rooms = [
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				{ "up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(1,1)},
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		var central_room_coords = Vector2(1,1)
+		var result = _dungeon._get_valid_addable_exits(dungeon_rooms, central_room_coords)
+		var expected = {
+			"up": true,
+			"down": true,
+			"left:": true,
+			"right": true,
+		}
+
+		assert_true(result.up);
+		assert_true(result.down);
+		assert_true(result.left);
+		assert_true(result.right);
+
+	func test_central_room_with_all_exits_built():
+		var dungeon_rooms = [
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				{ "up": true, "down": true, "left": true, "right": true, "room_coordinates": Vector2(1,1)},
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		var central_room_coords = Vector2(1,1)
+		var result = _dungeon._get_valid_addable_exits(dungeon_rooms, central_room_coords)
+		var expected = {
+			"up": false,
+			"down": false,
+			"left:": false,
+			"right": false,
+		}
+		
+		assert_false(result.up);
+		assert_false(result.down);
+		assert_false(result.left);
+		assert_false(result.right);
+
+	func test_corner_room_valid_exits():
+		var dungeon_rooms = [
+			[
+				{ "up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(0,0)},
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		var corner_room_coords = Vector2(0,0);
+		var result = _dungeon._get_valid_addable_exits(dungeon_rooms, corner_room_coords)
+		var expected = {
+			"up": false,
+			"down": true,
+			"left:": false,
+			"right": true,
+		}
+		
+		assert_false(result.up);
+		assert_true(result.down);
+		assert_false(result.left);
+		assert_true(result.right);
 
 class TestHasValidRoomExits:
 	extends GutTest
@@ -404,7 +709,7 @@ class TestHasValidRoomExits:
 		var result = _dungeon._room_has_valid_exits(dungeon_rooms, central_room_coords)
 		assert_true(result)
 
-	func test_central_room_with_one_valid_exits():
+	func test_central_room_with_one_valid_exit():
 		var dungeon_rooms = [
 			[
 				null,
@@ -449,6 +754,29 @@ class TestHasValidRoomExits:
 
 		var result = _dungeon._room_has_valid_exits(dungeon_rooms, central_room_coords)
 		assert_false(result)
+		
+	func test_corner_room_valid_exits():
+		var dungeon_rooms = [
+			[
+				{ "up": false, "down": false, "left": false, "right": false, "room_coordinates": Vector2(0,0)},
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+			[
+				null,
+				null,
+				null,
+			],
+		]
+		var corner_room_coords = Vector2(0,0);
+
+		var result = _dungeon._room_has_valid_exits(dungeon_rooms, corner_room_coords)
+		assert_true(result)
 		
 
 class TestReprocessRoom:
