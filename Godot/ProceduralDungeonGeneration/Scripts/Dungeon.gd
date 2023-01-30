@@ -6,7 +6,6 @@ signal dungeon_generation_complete;
 enum Directions { UP, DOWN, LEFT, RIGHT }
 const PERCENTAGE_CHANCE_OF_ROOM_EXIT_GENERATED = 33;
 export var target_dungeon_room_count: int = 10;
-export(PackedScene) var room_scene;
 
 var dungeon
 
